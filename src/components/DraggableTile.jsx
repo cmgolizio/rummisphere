@@ -1,137 +1,49 @@
-// "use client";
+"use client";
 
-// import React from "react";
-// // import { motion } from "framer-motion";
-// import { useDraggable } from "@dnd-kit/core";
-// import { motion, useMotionValue, useTransform } from "framer-motion";
-
+import { useDraggable } from "@dnd-kit/core";
+import { motion } from "framer-motion";
 // import Tile from "./Tile";
 
-// export default function DraggableTile({ tile }) {
-//   const { attributes, listeners, setNodeRef, transform } = useDraggable({
-//     id: tile.id,
-//   });
+const colorMap = {
+  red: "border-red-500 text-red-600",
+  blue: "border-blue-500 text-blue-600",
+  yellow: "border-yellow-500 text-yellow-600",
+  black: "border-slate-700 text-slate-800",
+};
 
-//   console.log("Tile:", tile.id, "Transform:", transform);
-
-//   const x = useMotionValue(0);
-//   const y = useMotionValue(0);
-
-//   const rotate = useTransform(x, [-100, 100], [-15, 15]);
-
-//   const style = {
-//     transform: transform
-//       ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
-//       : undefined,
-//     zIndex: transform ? 999 : "auto",
-//     cursor: "grab",
-//     x,
-//     y,
-//     rotate,
-//   };
-
-//   return (
-//     // <motion.div
-//     //   ref={setNodeRef}
-//     //   style={style}
-//     //   {...listeners}
-//     //   {...attributes}
-//     //   layout
-//     //   initial={{ y: -50, opacity: 0 }}
-//     //   animate={{ y: 0, opacity: 1 }}
-//     //   exit={{ y: -50, opacity: 0 }}
-//     //   transition={{ type: "spring", stiffness: 300, damping: 20 }}
-//     // >
-//     <motion.div
-//       className='bg-transparent text-white px-6 py-4 rounded-lg cursor-grab active:cursor-grabbing select-none'
-//       drag
-//       dragMomentum={false}
-//       // style={{
-//       //   x,
-//       //   y,
-//       //   rotate,
-//       // }}
-//       style={style}
-//       whileTap={{ scale: 1.1 }}
-//       whileHover={{ scale: 1.05 }}
-//       onDragStart={() => console.log("drag start")}
-//       onDrag={(e, info) => console.log("drag", info.point)}
-//       onDragEnd={() => console.log("drag end")}
-//     >
-//       <Tile tile={tile} />
-//     </motion.div>
-//   );
-// }
-
-// // "use client";
-
-// // import { motion, useMotionValue, useTransform } from "framer-motion";
-
-// // export default function HomePage() {
-// //   const x = useMotionValue(0);
-// //   const y = useMotionValue(0);
-
-// //   const rotate = useTransform(x, [-100, 100], [-15, 15]);
-
-// //   return (
-// //     <div className="flex flex-col items-center justify-center h-screen">
-// //       <h1 className="text-3xl font-bold mb-6">Drag the Tile!</h1>
-
-// //       <motion.div
-// //         className="bg-blue-500 text-white px-6 py-4 rounded-lg cursor-grab active:cursor-grabbing select-none"
-// //         drag
-// //         dragMomentum={false}
-// //         style={{
-// //           x,
-// //           y,
-// //           rotate,
-// //         }}
-// //         whileTap={{ scale: 1.1 }}
-// //         whileHover={{ scale: 1.05 }}
-// //         onDragStart={() => console.log("drag start")}
-// //         onDrag={(e, info) => console.log("drag", info.point)}
-// //         onDragEnd={() => console.log("drag end")}
-// //       >
-// //         🀄 Tile
-// //       </motion.div>
-// //     </div>
-// //   );
-// // }
-
-"use client";
-import React from "react";
-import { motion, useMotionValue } from "framer-motion";
-import { useDraggable } from "@dnd-kit/core";
-import Tile from "./Tile";
-
-export default function DraggableTile({ tile, onDrop }) {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: tile.id,
-  });
-
-  const x = useMotionValue(tile.x ?? 0);
-  const y = useMotionValue(tile.y ?? 0);
-
+function Tile({ tile }) {
+  const cls = colorMap[tile.color] || "border-slate-400 text-slate-700";
   return (
     <motion.div
+      layout
+      whileTap={{ scale: 0.96 }}
+      className={`w-10 h-12 rounded-md border-2 bg-white shadow-sm font-bold flex items-center justify-center select-none ${cls}`}
+    >
+      {tile.value}
+    </motion.div>
+  );
+}
+
+export default function DraggableTile({ tile }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: tile.id });
+
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
+  return (
+    <div
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      drag
-      dragMomentum={false}
-      style={{
-        x,
-        y,
-        position: "absolute",
-        zIndex: transform ? 999 : "auto",
-      }}
-      onDragEnd={(e, info) => {
-        const boardX = info.point.x - e.target.offsetParent.offsetLeft;
-        const boardY = info.point.y - e.target.offsetParent.offsetTop;
-        onDrop(tile.id, boardX, boardY);
-      }}
+      style={style}
+      className={`cursor-grab active:cursor-grabbing ${
+        isDragging ? "opacity-70" : ""
+      }`}
+      data-dnd-draggable
     >
       <Tile tile={tile} />
-    </motion.div>
+    </div>
   );
 }
