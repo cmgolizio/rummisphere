@@ -101,8 +101,11 @@ export default function GamePage() {
   };
 
   // const sensors = useSensors(useSensor(PointerSensor));
+  // const sensors = useSensors(
+  //   useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  // );
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    useSensor(PointerSensor) // no activation delay
   );
 
   const {
@@ -177,23 +180,28 @@ export default function GamePage() {
 
   return (
     <div className='max-w-6xl mx-auto p-4 grid grid-cols-12 gap-4'>
-      <h2 className='text-2xl mb-2'>
+      {/* <h2 className='text-2xl mb-2'>
         {DEBUG_LOCAL_GAME ? "🧩 Local Test Mode" : `RummiSphere ID: ${roomId}`}
-      </h2>
+      </h2> */}
 
       <motion.header
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
-        className='col-span-12 flex items-center justify-between'
+        className='col-span-12 flex flex-col items-center justify-between'
       >
         <h1 className='text-3xl font-extrabold tracking-tight'>Rummisphere</h1>
+        <h2 className='text-2xl mb-2'>
+          {DEBUG_LOCAL_GAME
+            ? "🧩 Local Test Mode"
+            : `RummiSphere ID: ${roomId}`}
+        </h2>
         <HUD />
       </motion.header>
 
       <section className='col-span-12 lg:col-span-8'>
         <DndContext
           sensors={sensors}
-          collisionDetection={rectIntersection}
+          collisionDetection={closestCenter}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
         >
