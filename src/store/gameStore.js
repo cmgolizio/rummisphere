@@ -1,109 +1,146 @@
 "use client";
 
 import { create } from "zustand";
+
 import { validateBoard } from "../lib/rummiRules";
+import { BOARD_COLS, BOARD_ROWS, createEmptyBoard } from "../lib/gameSetup";
 
-const BOARD_ROWS = 8;
-const BOARD_COLS = 14;
+const createValidationState = () => ({
+  ok: true,
+  issues: [],
+  invalidCells: new Set(),
+});
 
-const startTiles = [
-  { id: "t1", color: "red", value: 5 },
-  { id: "t2", color: "red", value: 6 },
-  { id: "t3", color: "red", value: 7 },
-  { id: "t4", color: "red", value: 9 },
-  { id: "t5", color: "blue", value: 12 },
-  { id: "t6", color: "black", value: 3 },
-  { id: "t7", color: "yellow", value: 1 },
-  { id: "t8", color: "yellow", value: 2 },
-];
-
-const emptyBoard = () =>
-  Array.from({ length: BOARD_ROWS }, () =>
-    Array.from({ length: BOARD_COLS }, () => ({ tileId: null }))
-  );
-
-const useGameStore = create((set, get) => ({
+const createInitialState = () => ({
   BOARD_ROWS,
   BOARD_COLS,
-  board: emptyBoard(),
-  tiles: startTiles.reduce((acc, t) => {
-    acc[t.id] = { ...t, location: { type: "tray" } };
-    return acc;
-  }, {}),
-  trayOrder: startTiles.map((t) => t.id),
+  board: createEmptyBoard(),
+  tiles: {},
+  trayOrder: [],
+  dragMeta: null,
+  validation: createValidationState(),
+});
 
-  // Drag meta (single or group)
-  dragMeta: null, // {type: 'single'|'group', group:{ids,row,columns,anchorId,kind}}
-  // Validation state
-  validation: { ok: true, issues: [], invalidCells: new Set() },
+const useGameStore = create((set, get) => ({
+  ...createInitialState(),
+
+  resetState: () => set(createInitialState()),
+
+  loadState: ({ board, tiles, trayOrder } = {}) => {
+    set(() => {
+      const normalizedBoard = Array.isArray(board) && board.length > 0
+        ? board.map((row) =>
+            Array.isArray(row)
+              ? row.map((cell) => ({ tileId: cell?.tileId ?? null }))
+              : Array.from({ length: BOARD_COLS }, () => ({ tileId: null }))
+          )
+        : createEmptyBoard();
+
+      const normalizedTiles = {};
+      if (tiles && typeof tiles === "object") {
+        Object.keys(tiles).forEach((id) => {
+          const tile = tiles[id];
+          if (!tile) return;
+          normalizedTiles[id] = {
+            id,
+            color: tile.color,
+            value: tile.value,
+            isJoker: Boolean(tile.isJoker),
+            location: tile.location ?? { type: "tray" },
+          };
+        });
+      }
+
+      normalizedBoard.forEach((row, r) => {
+        row.forEach((cell, c) => {
+          if (!cell.tileId) return;
+          const existing = normalizedTiles[cell.tileId] ?? {
+            id: cell.tileId,
+            color: "red",
+            value: 0,
+            isJoker: false,
+          };
+          normalizedTiles[cell.tileId] = {
+            ...existing,
+            location: { type: "board", row: r, col: c },
+          };
+        });
+      });
+
+      const dedupTray = [];
+      const seen = new Set();
+      const providedTray = Array.isArray(trayOrder) ? trayOrder : [];
+
+      providedTray.forEach((id) => {
+        if (!normalizedTiles[id] || seen.has(id)) return;
+        if (normalizedTiles[id].location?.type !== "board") {
+          normalizedTiles[id] = {
+            ...normalizedTiles[id],
+            location: { type: "tray" },
+          };
+        }
+        dedupTray.push(id);
+        seen.add(id);
+      });
+
+      Object.keys(normalizedTiles).forEach((id) => {
+        const tile = normalizedTiles[id];
+        if (tile.location?.type === "tray" && !seen.has(id)) {
+          dedupTray.push(id);
+          seen.add(id);
+        }
+      });
+
+      return {
+        board: normalizedBoard,
+        tiles: normalizedTiles,
+        trayOrder: dedupTray,
+        dragMeta: null,
+        validation: createValidationState(),
+      };
+    });
+  },
 
   setDragMeta: (meta) => set({ dragMeta: meta }),
 
   ensureCellEmpty: (r, c) => {
-    const b = get().board;
-    return b[r] && b[r][c] && b[r][c].tileId === null;
+    const board = get().board;
+    return Boolean(board[r]) && Boolean(board[r][c]) && board[r][c].tileId === null;
   },
 
-  // moveTileToCell: (tileId, r, c) => {
-  //   set((state) => {
-  //     const nextBoard = state.board.map((row) =>
-  //       row.map((cell) => ({ ...cell }))
-  //     );
-
-  //     // remove tile from existing cell
-  //     for (let i = 0; i < state.BOARD_ROWS; i++) {
-  //       for (let j = 0; j < state.BOARD_COLS; j++) {
-  //         if (nextBoard[i][j].tileId === tileId) nextBoard[i][j].tileId = null;
-  //       }
-  //     }
-
-  //     nextBoard[r][c].tileId = tileId;
-
-  //     const nextTiles = { ...state.tiles };
-  //     nextTiles[tileId] = {
-  //       ...nextTiles[tileId],
-  //       location: { type: "board", row: r, col: c },
-  //     };
-
-  //     const nextTray = state.trayOrder.filter((id) => id !== tileId);
-
-  //     return { board: nextBoard, tiles: nextTiles, trayOrder: nextTray };
-  //   });
-  // },
   moveTileToCell: (tileId, r, c) => {
     set((state) => {
-      const board = state.board; // reference
-      const tiles = state.tiles;
+      const { board, tiles, trayOrder } = state;
+      if (!tiles[tileId] || !board[r] || !board[r][c]) return {};
 
-      // Clone only the affected rows (old row + new row)
       const newBoard = [...board];
+      const currentTile = tiles[tileId];
 
-      // 1) Remove tile from old cell (if it was on board)
-      const oldLoc = tiles[tileId].location;
-      if (oldLoc?.type === "board") {
-        const oldRow = [...newBoard[oldLoc.row]];
-        oldRow[oldLoc.col] = { tileId: null };
-        newBoard[oldLoc.row] = oldRow;
+      if (currentTile.location?.type === "board") {
+        const prevRowIndex = currentTile.location.row;
+        const prevColIndex = currentTile.location.col;
+        if (newBoard[prevRowIndex]) {
+          const prevRow = [...newBoard[prevRowIndex]];
+          prevRow[prevColIndex] = { tileId: null };
+          newBoard[prevRowIndex] = prevRow;
+        }
       }
 
-      // 2) Place tile in new cell
-      const newRow = [...newBoard[r]];
-      newRow[c] = { tileId };
-      newBoard[r] = newRow;
+      const targetRow = [...newBoard[r]];
+      targetRow[c] = { tileId };
+      newBoard[r] = targetRow;
 
-      // 3) Update tile metadata
       const newTiles = {
         ...tiles,
         [tileId]: {
-          ...tiles[tileId],
+          ...currentTile,
           location: { type: "board", row: r, col: c },
         },
       };
 
-      // 4) Update tray order only if needed
-      const newTray = state.trayOrder.includes(tileId)
-        ? state.trayOrder.filter((id) => id !== tileId)
-        : state.trayOrder;
+      const newTray = trayOrder.includes(tileId)
+        ? trayOrder.filter((id) => id !== tileId)
+        : trayOrder;
 
       return { board: newBoard, tiles: newTiles, trayOrder: newTray };
     });
@@ -111,97 +148,72 @@ const useGameStore = create((set, get) => ({
 
   moveTileToTray: (tileId) => {
     set((state) => {
-      const nextBoard = state.board.map((row) =>
-        row.map((cell) =>
-          cell.tileId === tileId ? { tileId: null } : { ...cell }
-        )
+      const { board, tiles, trayOrder } = state;
+      if (!tiles[tileId]) return {};
+
+      const newBoard = board.map((row) =>
+        row.map((cell) => (cell.tileId === tileId ? { tileId: null } : cell))
       );
 
-      const nextTiles = { ...state.tiles };
-      nextTiles[tileId] = { ...nextTiles[tileId], location: { type: "tray" } };
+      const newTiles = {
+        ...tiles,
+        [tileId]: {
+          ...tiles[tileId],
+          location: { type: "tray" },
+        },
+      };
 
-      const nextTray = state.trayOrder.includes(tileId)
-        ? state.trayOrder.slice()
-        : [...state.trayOrder, tileId];
+      const seen = new Set();
+      const filtered = trayOrder.filter((id) => {
+        if (id === tileId) return false;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+      filtered.push(tileId);
 
-      return { board: nextBoard, tiles: nextTiles, trayOrder: nextTray };
+      return { board: newBoard, tiles: newTiles, trayOrder: filtered };
     });
   },
 
-  /** Batch-place multiple tiles at once (used for group placement) */
-  // placeBatch: (placements) => {
-  //   set((state) => {
-  //     const nextBoard = state.board.map((row) =>
-  //       row.map((cell) => ({ ...cell }))
-  //     );
-  //     const nextTiles = { ...state.tiles };
-
-  //     // Clear any boards cells that will be re-occupied by these ids
-  //     const ids = placements.map((p) => p.id);
-  //     for (let i = 0; i < state.BOARD_ROWS; i++) {
-  //       for (let j = 0; j < state.BOARD_COLS; j++) {
-  //         if (nextBoard[i][j].tileId && ids.includes(nextBoard[i][j].tileId)) {
-  //           nextBoard[i][j].tileId = null;
-  //         }
-  //       }
-  //     }
-
-  //     // Place all
-  //     for (const p of placements) {
-  //       nextBoard[p.row][p.col].tileId = p.id;
-  //       nextTiles[p.id] = {
-  //         ...nextTiles[p.id],
-  //         location: { type: "board", row: p.row, col: p.col },
-  //       };
-  //     }
-
-  //     const nextTray = state.trayOrder.filter((id) => !ids.includes(id));
-  //     return { board: nextBoard, tiles: nextTiles, trayOrder: nextTray };
-  //   });
-  // },
   placeBatch: (placements) => {
     set((state) => {
-      const board = state.board;
-      const tiles = state.tiles;
-
+      const { board, tiles, trayOrder } = state;
       const newBoard = [...board];
       const newTiles = { ...tiles };
 
-      // Clear old cells
-      for (const { id } of placements) {
-        const loc = newTiles[id].location;
-        if (loc?.type === "board") {
+      placements.forEach(({ id }) => {
+        const loc = newTiles[id]?.location;
+        if (loc?.type === "board" && newBoard[loc.row]) {
           const rowClone = [...newBoard[loc.row]];
           rowClone[loc.col] = { tileId: null };
           newBoard[loc.row] = rowClone;
         }
-      }
+      });
 
-      // Place new cells
-      for (const p of placements) {
-        const rowClone = [...newBoard[p.row]];
-        rowClone[p.col] = { tileId: p.id };
-        newBoard[p.row] = rowClone;
+      placements.forEach((placement) => {
+        const rowClone = [...newBoard[placement.row]];
+        rowClone[placement.col] = { tileId: placement.id };
+        newBoard[placement.row] = rowClone;
 
-        newTiles[p.id] = {
-          ...newTiles[p.id],
-          location: { type: "board", row: p.row, col: p.col },
+        newTiles[placement.id] = {
+          ...newTiles[placement.id],
+          location: { type: "board", row: placement.row, col: placement.col },
         };
-      }
+      });
 
-      const movedIds = placements.map((p) => p.id);
-      const newTray = state.trayOrder.filter((id) => !movedIds.includes(id));
+      const movedIds = new Set(placements.map((p) => p.id));
+      const newTray = trayOrder.filter((id) => !movedIds.has(id));
 
       return { board: newBoard, tiles: newTiles, trayOrder: newTray };
     });
   },
 
-  /** Validation */
   runValidation: () => {
     const { board, tiles } = get();
-    const res = validateBoard(board, tiles);
-    set({ validation: res });
-    return res;
+    const result = validateBoard(board, tiles);
+    set({ validation: result });
+    return result;
   },
 }));
 

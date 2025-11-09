@@ -1,27 +1,72 @@
-export function generateMockGameState() {
-  const colors = ["red", "blue", "yellow", "black"];
-  const tiles = [];
+import { createEmptyBoard } from "./gameSetup";
 
-  // Generate random sample tiles for player tray
-  for (let i = 0; i < 14; i++) {
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const number = Math.ceil(Math.random() * 13);
-    tiles.push({ id: i, color, number });
-  }
+function makeTile(color, value, suffix, location) {
+  return {
+    id: `mock-${color}-${value}-${suffix}`,
+    color,
+    value,
+    isJoker: color === "joker",
+    location,
+  };
+}
+
+export function generateMockGameState() {
+  const board = createEmptyBoard();
+  const tiles = {};
+  const trayOrder = [];
+
+  const boardPlacements = [
+    { color: "red", value: 3, row: 0, col: 0 },
+    { color: "red", value: 4, row: 0, col: 1 },
+    { color: "red", value: 5, row: 0, col: 2 },
+    { color: "blue", value: 7, row: 1, col: 0 },
+    { color: "yellow", value: 7, row: 1, col: 1 },
+    { color: "black", value: 7, row: 1, col: 2 },
+  ];
+
+  boardPlacements.forEach((placement, idx) => {
+    const tile = makeTile(placement.color, placement.value, `board-${idx}`, {
+      type: "board",
+      row: placement.row,
+      col: placement.col,
+    });
+    board[placement.row][placement.col] = { tileId: tile.id };
+    tiles[tile.id] = tile;
+  });
+
+  const traySeed = [
+    { color: "yellow", value: 1 },
+    { color: "yellow", value: 2 },
+    { color: "yellow", value: 3 },
+    { color: "blue", value: 10 },
+    { color: "blue", value: 11 },
+    { color: "black", value: 6 },
+    { color: "black", value: 8 },
+    { color: "red", value: 8 },
+    { color: "red", value: 9 },
+    { color: "red", value: 10 },
+    { color: "blue", value: 2 },
+    { color: "black", value: 12 },
+    { color: "yellow", value: 5 },
+    { color: "joker", value: 0 },
+  ];
+
+  traySeed.forEach((seed, idx) => {
+    const tile = makeTile(seed.color, seed.value, `tray-${idx}`, {
+      type: "tray",
+    });
+    tiles[tile.id] = tile;
+    trayOrder.push(tile.id);
+  });
 
   return {
-    board: [
-      [
-        { id: 101, color: "red", number: 3 },
-        { id: 102, color: "red", number: 4 },
-        { id: 103, color: "red", number: 5 },
-      ],
-      [
-        { id: 104, color: "blue", number: 7 },
-        { id: 105, color: "yellow", number: 7 },
-        { id: 106, color: "black", number: 7 },
-      ],
+    board,
+    tiles,
+    trayOrder,
+    players: [
+      { id: "mock-player", name: "You" },
+      { id: "mock-ai", name: "AI Opponent" },
     ],
-    playerTiles: tiles,
+    currentTurn: 0,
   };
 }
