@@ -1,17 +1,26 @@
-// import { io } from "socket.io-client";
-
-// let socket;
-
-// export const getSocket = () => {
-//   if (!socket) socket = io("http://localhost:3001"); // adjust origin in prod
-//   return socket;
-// };
 import { io } from "socket.io-client";
 
-// Point to your local socket server
-const socket = io("http://localhost:3001", {
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
+
+const socket = io(SOCKET_URL, {
   transports: ["websocket"],
   autoConnect: false,
 });
+
+export const connectSocket = () => {
+  if (socket.disconnected) {
+    socket.connect();
+  }
+  return socket;
+};
+
+export const disconnectSocket = () => {
+  if (socket.connected) {
+    socket.disconnect();
+  }
+};
+
+export { SOCKET_URL };
 
 export default socket;
